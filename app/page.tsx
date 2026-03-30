@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Session, SessionMeta, Observation, Issue } from "@/app/types";
+import { Session, SessionMeta, Observation, Issue, calcPriority } from "@/app/types";
 import Step1Input from "@/app/components/Step1Input";
 import Step2Structure from "@/app/components/Step2Structure";
 import Step3Issues from "@/app/components/Step3Issues";
@@ -28,10 +28,10 @@ function saveSession(session: Session) {
 
 export default function HomePage() {
   const [step, setStep] = useState<Step>(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const [meta, setMeta] = useState<SessionMeta | null>(null);
+  /** Step1で入力した発話ログ（新規観察カードの raw 初期値として使う） */
+  const [sessionLog, setSessionLog] = useState("");
   const [observations, setObservations] = useState<Observation[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
 
@@ -40,56 +40,54 @@ export default function HomePage() {
     : null;
 
   const handleStep1Next = useCallback(
-    async (metaInput: Omit<SessionMeta, "id" | "createdAt">, log: string) => {
+    (metaInput: Omit<SessionMeta, "id" | "createdAt">, log: string) => {
       const newMeta: SessionMeta = {
         ...metaInput,
         id: generateId(),
         createdAt: new Date().toISOString(),
       };
       setMeta(newMeta);
-      setLoading(true);
-      setError(null);
+      setSessionLog(log);
+      // Step1完了時点では観察カードを1件作成（raw は Step1 ログを保持）。
+      const initialObservation: Observation = {
+        id: `obs-${generateId()}`,
+        raw: log,
+        observation: "",
+        interpretation: "",
+        insight: "",
+      };
 
-      try {
-        const res = await fetch("/api/analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "structure", log, target: metaInput.target }),
-        });
-        if (!res.ok) throw new Error("分析に失敗しました");
-        const data = await res.json();
-        setObservations(data.observations);
-        setStep(2);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "エラーが発生しました");
-      } finally {
-        setLoading(false);
-      }
+      setObservations([initialObservation]);
+      setIssues([]); // 後続ステップの状態をクリア
+      setStep(2);
     },
     []
   );
 
-  const handleStep2Next = useCallback(async () => {
+  const handleStep2Next = useCallback(() => {
     if (!meta) return;
-    setLoading(true);
-    setError(null);
 
-    try {
-      const res = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "extract_issues", observations, target: meta.target }),
-      });
-      if (!res.ok) throw new Error("課題抽出に失敗しました");
-      const data = await res.json();
-      setIssues(data.issues);
-      setStep(3);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "エラーが発生しました");
-    } finally {
-      setLoading(false);
-    }
-  }, [meta, observations]);
+    // 初回のみ空の課題カードを1件。Step3で追加済みの場合や戻る→進むの再入場では上書きしない。
+    setIssues((prev) => {
+      if (prev.length > 0) return prev;
+      const initialScores = { impact: 3, frequency: 3, severity: 3, effort: 3 };
+      const { priority } = calcPriority(initialScores);
+      return [
+        {
+          id: `issue-${generateId()}`,
+          title: "",
+          description: "",
+          nielsenCategory: 1,
+          scores: initialScores,
+          priority,
+          shortTermAction: "",
+          longTermAction: "",
+          sourceObsIds: [],
+        },
+      ];
+    });
+    setStep(3);
+  }, [meta]);
 
   const handleStep3Next = useCallback(() => {
     if (session) saveSession(session);
@@ -104,9 +102,9 @@ export default function HomePage() {
   const handleNewSession = useCallback(() => {
     setStep(1);
     setMeta(null);
+    setSessionLog("");
     setObservations([]);
     setIssues([]);
-    setError(null);
   }, []);
 
   return (
@@ -148,30 +146,12 @@ export default function HomePage() {
           })}
         </div>
 
-        {/* エラー表示 */}
-        {error && (
-          <div className="mb-4 bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
-            {error}
-          </div>
-        )}
-
-        {/* ローディングオーバーレイ */}
-        {loading && (
-          <div className="fixed inset-0 bg-white bg-opacity-75 flex items-center justify-center z-50">
-            <div className="text-center">
-              <div className="inline-block w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-3" />
-              <p className="text-sm text-gray-600">
-                {step === 1 ? "発話ログを構造化しています..." : "課題を抽出しています..."}
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* ステップコンテンツ */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
           {step === 1 && <Step1Input onNext={handleStep1Next} />}
           {step === 2 && (
             <Step2Structure
+              sessionLog={sessionLog}
               observations={observations}
               onChange={setObservations}
               onNext={handleStep2Next}

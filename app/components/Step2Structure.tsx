@@ -1,18 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Observation } from "@/app/types";
 
+function generateId() {
+  return Math.random().toString(36).slice(2, 10);
+}
+
 interface Props {
+  /** Step1で入力した発話ログ（新規カードの raw 初期値） */
+  sessionLog: string;
   observations: Observation[];
   onChange: (observations: Observation[]) => void;
   onNext: () => void;
   onBack: () => void;
 }
 
-export default function Step2Structure({ observations, onChange, onNext, onBack }: Props) {
+export default function Step2Structure({ sessionLog, observations, onChange, onNext, onBack }: Props) {
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<Partial<Observation>>({});
+  const didAutoOpenFirst = useRef(false);
+
+  useEffect(() => {
+    if (didAutoOpenFirst.current) return;
+    if (observations.length !== 1) return;
+    const first = observations[0];
+
+    const observationEmpty = first.observation.trim() === "";
+    const interpretationEmpty = first.interpretation.trim() === "";
+    const insightEmpty = first.insight.trim() === "";
+
+    // Step1完了直後の1枚目の空カードだけ、すぐ入力できるよう編集状態に入れる。
+    if (observationEmpty && interpretationEmpty && insightEmpty) {
+      didAutoOpenFirst.current = true;
+      setEditing(first.id);
+      setDraft({ ...first });
+    }
+  }, [observations]);
 
   const startEdit = (obs: Observation) => {
     setEditing(obs.id);
@@ -25,12 +49,35 @@ export default function Step2Structure({ observations, onChange, onNext, onBack 
     setEditing(null);
   };
 
+  const addObservation = () => {
+    const newObs: Observation = {
+      id: `obs-${generateId()}`,
+      raw: sessionLog,
+      observation: "",
+      interpretation: "",
+      insight: "",
+    };
+    onChange([...observations, newObs]);
+    setEditing(newObs.id);
+    setDraft({ ...newObs });
+  };
+
+  const removeObservation = (id: string) => {
+    if (observations.length <= 1) return;
+    const next = observations.filter((o) => o.id !== id);
+    onChange(next);
+    if (editing === id) {
+      setEditing(null);
+      setDraft({});
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold text-gray-800 mb-1">構造化ログ確認</h2>
+        <h2 className="text-xl font-semibold text-gray-800 mb-1">観察・解釈・インサイト入力</h2>
         <p className="text-sm text-gray-500">
-          AIが発話ログを「観察 / 解釈 / インサイト」に構造化しました。内容を確認し、必要に応じて修正してください。
+          観察（事実）・解釈（仮説）・インサイト（本質的ニーズ/痛み）を手入力してください。
         </p>
       </div>
 
@@ -63,7 +110,16 @@ export default function Step2Structure({ observations, onChange, onNext, onBack 
                     </div>
                   ))}
                 </div>
-                <div className="flex gap-2 justify-end">
+                <div className="flex gap-2 justify-end flex-wrap">
+                  {observations.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeObservation(obs.id)}
+                      className="text-sm text-red-600 hover:text-red-800 px-3 py-1 mr-auto"
+                    >
+                      このカードを削除
+                    </button>
+                  )}
                   <button onClick={() => setEditing(null)} className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1">
                     キャンセル
                   </button>
@@ -86,12 +142,24 @@ export default function Step2Structure({ observations, onChange, onNext, onBack 
                       <Cell label="インサイト" color="purple" text={obs.insight} />
                     </div>
                   </div>
-                  <button
-                    onClick={() => startEdit(obs)}
-                    className="text-xs text-gray-400 hover:text-indigo-600 whitespace-nowrap"
-                  >
-                    編集
-                  </button>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    {observations.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeObservation(obs.id)}
+                        className="text-xs text-red-500 hover:text-red-700 whitespace-nowrap"
+                      >
+                        削除
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => startEdit(obs)}
+                      className="text-xs text-gray-400 hover:text-indigo-600 whitespace-nowrap"
+                    >
+                      編集
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -99,15 +167,26 @@ export default function Step2Structure({ observations, onChange, onNext, onBack 
         ))}
       </div>
 
+      <div>
+        <button
+          type="button"
+          onClick={addObservation}
+          className="w-full border-2 border-dashed border-gray-300 rounded-lg py-3 text-sm font-medium text-gray-600 hover:border-indigo-400 hover:text-indigo-700 hover:bg-indigo-50/50 transition-colors"
+        >
+          + 観察カードを追加
+        </button>
+      </div>
+
       <div className="flex justify-between">
         <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-700 px-4 py-2">
           ← 戻る
         </button>
         <button
+          type="button"
           onClick={onNext}
           className="bg-indigo-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
         >
-          課題を抽出 →
+          課題入力へ →
         </button>
       </div>
     </div>

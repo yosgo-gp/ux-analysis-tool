@@ -13,7 +13,8 @@ export default function Step1Input({ onNext }: Props) {
   const [participants, setParticipants] = useState(1);
   const [log, setLog] = useState("");
 
-  const canSubmit = target.trim() && log.trim().length > 10;
+  // Step1ではメタ情報入力後に Step2 へ進める（ログは任意）。
+  const canSubmit = target.trim().length > 0;
 
   return (
     <div className="space-y-6">
@@ -60,7 +61,7 @@ export default function Step1Input({ onNext }: Props) {
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          発話ログ <span className="text-red-500">*</span>
+          発話ログ <span className="text-xs font-normal text-gray-400">(任意)</span>
         </label>
         <p className="text-xs text-gray-400 mb-2">
           テスト中の発話・観察記録をそのまま貼り付けてください（発話者ラベルありでも可）
