@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { Issue, IssueScore, NIELSEN_PRINCIPLES, calcPriority } from "@/app/types";
+import { useEffect, useMemo, useState } from "react";
+import { Observation, Issue, IssueScore, NIELSEN_PRINCIPLES, calcPriority } from "@/app/types";
+import { IssueCandidateMeta, generateIssueCandidatesFromInsights } from "@/app/lib/issueCandidateFromInsights";
 
 function generateId() {
   return Math.random().toString(36).slice(2, 10);
@@ -9,6 +10,7 @@ function generateId() {
 
 interface Props {
   issues: Issue[];
+  observations: Observation[];
   onChange: (issues: Issue[]) => void;
   onNext: () => void;
   onBack: () => void;
@@ -21,8 +23,18 @@ const SCORE_LABELS: Record<string, string[]> = {
   effort: ["", "大規模改修", "中規模改修", "小改修", "軽微な修正", "即日対応可"],
 };
 
-export default function Step3Issues({ issues, onChange, onNext, onBack }: Props) {
+export default function Step3Issues({ issues, observations, onChange, onNext, onBack }: Props) {
   const [expanded, setExpanded] = useState<string | null>(issues[0]?.id ?? null);
+  const [candidateMetaByIssueId, setCandidateMetaByIssueId] = useState<Record<string, IssueCandidateMeta>>({});
+
+  useEffect(() => {
+    if (issues.length === 0) {
+      setExpanded(null);
+      return;
+    }
+    if (expanded && issues.some((i) => i.id === expanded)) return;
+    setExpanded(issues[0]?.id ?? null);
+  }, [expanded, issues]);
 
   const updateIssue = (issueId: string, patch: Partial<Issue>) => {
     onChange(issues.map((issue) => (issue.id === issueId ? { ...issue, ...patch } : issue)));
@@ -61,7 +73,27 @@ export default function Step3Issues({ issues, onChange, onNext, onBack }: Props)
     if (issues.length <= 1) return;
     const next = issues.filter((i) => i.id !== id);
     onChange(next);
+    setCandidateMetaByIssueId((prev) => {
+      const copy = { ...prev };
+      delete copy[id];
+      return copy;
+    });
     setExpanded((prev) => (prev === id ? next[0]?.id ?? null : prev));
+  };
+
+  const insightsCount = useMemo(() => observations.filter((o) => o.insight.trim().length > 0).length, [observations]);
+
+  const generateFromInsights = () => {
+    if (insightsCount === 0) return;
+    if (issues.length > 0) {
+      const ok = window.confirm("既存の課題カードを上書きして、インサイトから課題候補を生成します。よろしいですか？");
+      if (!ok) return;
+    }
+
+    const { issues: generatedIssues, metaByIssueId } = generateIssueCandidatesFromInsights(observations, () => generateId());
+    onChange(generatedIssues);
+    setCandidateMetaByIssueId(metaByIssueId);
+    setExpanded(generatedIssues[0]?.id ?? null);
   };
 
   const priorityColor = (p: string) =>
@@ -76,9 +108,24 @@ export default function Step3Issues({ issues, onChange, onNext, onBack }: Props)
         </p>
       </div>
 
+      <div className="space-y-2">
+        <button
+          type="button"
+          onClick={generateFromInsights}
+          disabled={insightsCount === 0}
+          className="w-full border-2 border-indigo-200 rounded-lg py-3 text-sm font-medium text-indigo-700 hover:border-indigo-300 hover:bg-indigo-50/50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          インサイト一覧から課題候補を生成
+        </button>
+        <p className="text-xs text-gray-400">
+          APIは使わず、インサイトのキーワードからテンプレベースで生成します（入力量に依存）。
+        </p>
+      </div>
+
       <div className="space-y-3">
         {issues.map((issue) => {
           const { total } = calcPriority(issue.scores);
+          const meta = candidateMetaByIssueId[issue.id];
           return (
             <div key={issue.id} className="border border-gray-200 rounded-lg overflow-hidden">
               <div className="flex items-stretch">
@@ -147,14 +194,13 @@ export default function Step3Issues({ issues, onChange, onNext, onBack }: Props)
                         onChange={(e) => updateIssue(issue.id, { nielsenCategory: Number(e.target.value) })}
                         className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
                       >
-                        {Array.from({ length: 10 }).map((_, idx) => {
-                          const n = idx + 1;
-                          return (
+                        {(meta?.candidateNielsenCategories?.length ? meta.candidateNielsenCategories : Array.from({ length: 10 }, (_, idx) => idx + 1)).map(
+                          (n) => (
                             <option key={n} value={n}>
                               N{n}: {NIELSEN_PRINCIPLES[n - 1]}
                             </option>
-                          );
-                        })}
+                          )
+                        )}
                       </select>
                     </div>
                   </div>
@@ -188,6 +234,25 @@ export default function Step3Issues({ issues, onChange, onNext, onBack }: Props)
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-gray-100">
                     <div className="bg-green-50 border border-green-100 rounded p-3">
                       <p className="text-xs font-semibold text-green-600 mb-1">短期施策</p>
+                      {meta?.shortTermTemplates?.length ? (
+                        <div className="space-y-2 mb-2">
+                          <p className="text-xs text-green-700">テンプレ候補（クリックで反映）</p>
+                          <div className="flex flex-wrap gap-2">
+                            {meta.shortTermTemplates.map((t, idx) => (
+                              <button
+                                key={`${idx}-${t}`}
+                                type="button"
+                                onClick={() => updateIssue(issue.id, { shortTermAction: t })}
+                                className={`text-xs px-2 py-1 rounded border transition-colors ${
+                                  issue.shortTermAction === t ? "bg-green-600 text-white border-green-600" : "bg-white text-green-700 border-green-200 hover:border-green-300"
+                                }`}
+                              >
+                                {idx + 1}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                       <textarea
                         value={issue.shortTermAction}
                         onChange={(e) => updateIssue(issue.id, { shortTermAction: e.target.value })}
@@ -198,6 +263,25 @@ export default function Step3Issues({ issues, onChange, onNext, onBack }: Props)
                     </div>
                     <div className="bg-blue-50 border border-blue-100 rounded p-3">
                       <p className="text-xs font-semibold text-blue-600 mb-1">中長期施策</p>
+                      {meta?.longTermTemplates?.length ? (
+                        <div className="space-y-2 mb-2">
+                          <p className="text-xs text-blue-700">テンプレ候補（クリックで反映）</p>
+                          <div className="flex flex-wrap gap-2">
+                            {meta.longTermTemplates.map((t, idx) => (
+                              <button
+                                key={`${idx}-${t}`}
+                                type="button"
+                                onClick={() => updateIssue(issue.id, { longTermAction: t })}
+                                className={`text-xs px-2 py-1 rounded border transition-colors ${
+                                  issue.longTermAction === t ? "bg-blue-600 text-white border-blue-600" : "bg-white text-blue-700 border-blue-200 hover:border-blue-300"
+                                }`}
+                              >
+                                {idx + 1}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ) : null}
                       <textarea
                         value={issue.longTermAction}
                         onChange={(e) => updateIssue(issue.id, { longTermAction: e.target.value })}

@@ -173,6 +173,7 @@ export default function HomePage() {
           {step === 3 && (
             <Step3Issues
               issues={issues}
+              observations={observations}
               onChange={setIssues}
               onNext={handleStep3Next}
               onBack={() => setStep(2)}
