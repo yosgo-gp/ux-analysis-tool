@@ -3,178 +3,130 @@
 import { useEffect, useRef, useState } from "react";
 import { Observation } from "@/app/types";
 
-function generateId() {
-  return Math.random().toString(36).slice(2, 10);
-}
+function generateId() { return Math.random().toString(36).slice(2, 10); }
 
 interface Props {
-  /** Step1で入力した発話ログ（新規カードの raw 初期値） */
   sessionLog: string;
   observations: Observation[];
   onChange: (observations: Observation[]) => void;
   onNext: () => void;
   onBack: () => void;
-  /** ログから観察カードを再生成（ブラウザ内のルールベース） */
   onRegenerateFromLog?: () => void;
 }
+
+const CELLS: { field: "observation" | "interpretation" | "insight"; label: string; color: string; bg: string; border: string }[] = [
+  { field: "observation",   label: "観察",      color: "#1d4ed8", bg: "#eff6ff", border: "#bfdbfe" },
+  { field: "interpretation",label: "解釈",      color: "#b45309", bg: "#fffbeb", border: "#fde68a" },
+  { field: "insight",       label: "インサイト", color: "#6d28d9", bg: "#f5f3ff", border: "#ddd6fe" },
+];
 
 export default function Step2Structure({ sessionLog, observations, onChange, onNext, onBack, onRegenerateFromLog }: Props) {
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<Partial<Observation>>({});
-  const didAutoOpenFirst = useRef(false);
+  const didAutoOpen = useRef(false);
 
   useEffect(() => {
-    if (didAutoOpenFirst.current) return;
-    if (observations.length !== 1) return;
+    if (didAutoOpen.current || observations.length !== 1) return;
     const first = observations[0];
-
-    const observationEmpty = first.observation.trim() === "";
-    const interpretationEmpty = first.interpretation.trim() === "";
-    const insightEmpty = first.insight.trim() === "";
-
-    // Step1完了直後の1枚目の空カードだけ、すぐ入力できるよう編集状態に入れる。
-    if (observationEmpty && interpretationEmpty && insightEmpty) {
-      didAutoOpenFirst.current = true;
-      setEditing(first.id);
-      setDraft({ ...first });
+    if (!first.observation && !first.interpretation && !first.insight) {
+      didAutoOpen.current = true;
+      setEditing(first.id); setDraft({ ...first });
     }
   }, [observations]);
 
-  const startEdit = (obs: Observation) => {
-    setEditing(obs.id);
-    setDraft({ ...obs });
-  };
-
+  const startEdit = (obs: Observation) => { setEditing(obs.id); setDraft({ ...obs }); };
   const saveEdit = () => {
     if (!editing) return;
-    onChange(observations.map((o) => (o.id === editing ? { ...o, ...draft } : o)));
+    onChange(observations.map((o) => o.id === editing ? { ...o, ...draft } : o));
     setEditing(null);
   };
-
   const addObservation = () => {
-    const newObs: Observation = {
-      id: `obs-${generateId()}`,
-      raw: sessionLog,
-      observation: "",
-      interpretation: "",
-      insight: "",
-    };
-    onChange([...observations, newObs]);
-    setEditing(newObs.id);
-    setDraft({ ...newObs });
+    const n: Observation = { id: `obs-${generateId()}`, raw: sessionLog, observation: "", interpretation: "", insight: "" };
+    onChange([...observations, n]); setEditing(n.id); setDraft({ ...n });
   };
-
   const removeObservation = (id: string) => {
     if (observations.length <= 1) return;
-    const next = observations.filter((o) => o.id !== id);
-    onChange(next);
-    if (editing === id) {
-      setEditing(null);
-      setDraft({});
-    }
+    onChange(observations.filter((o) => o.id !== id));
+    if (editing === id) { setEditing(null); setDraft({}); }
   };
 
   return (
-    <div className="space-y-6">
+    <div style={{ display: "flex", flexDirection: "column", gap: "28px" }}>
       <div>
-        <h2 className="text-xl font-semibold text-gray-800 mb-1">観察・解釈・インサイト入力</h2>
-        <p className="text-sm text-gray-500">
-          観察（事実）・解釈（仮説）・インサイト（本質的ニーズ/痛み）を確認・修正してください。Step1で貼ったログから、
-          ブラウザ内のルールで下書きを生成する場合は「ログから再生成」を使えます。
-        </p>
+        <h2 className="section-title">観察・解釈・インサイト入力</h2>
+        <p className="section-sub">観察（事実）・解釈（仮説）・インサイト（本質的ニーズ / 痛み）を確認・修正してください。</p>
       </div>
 
       {onRegenerateFromLog && (
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={onRegenerateFromLog}
-            className="text-sm border border-indigo-300 text-indigo-700 px-4 py-2 rounded-lg font-medium hover:bg-indigo-50 transition-colors"
-          >
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <button type="button" onClick={onRegenerateFromLog} className="btn-secondary" style={{ fontSize: "13px", padding: "8px 16px" }}>
+            <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+              <path d="M2 6.5A4.5 4.5 0 1 1 6.5 11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              <path d="M2 9.5V6.5H5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
             ログから観察カードを再生成
           </button>
-          <p className="text-xs text-gray-400 self-center">外部APIは使いません（キーワード・話者ラベル・前後行のヒューリスティック）</p>
+          <span className="field-hint" style={{ margin: 0 }}>外部APIは使いません</span>
         </div>
       )}
 
-      <div className="space-y-3">
-        {observations.map((obs) => (
-          <div key={obs.id} className="border border-gray-200 rounded-lg overflow-hidden">
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+        {observations.map((obs, idx) => (
+          <div key={obs.id} style={{ border: `1.5px solid ${editing === obs.id ? "var(--primary)" : "var(--border)"}`, borderRadius: "var(--radius-md)", overflow: "hidden", transition: "border-color 0.15s" }}>
             {editing === obs.id ? (
-              <div className="p-4 space-y-3 bg-indigo-50">
+              <div style={{ padding: "20px", background: "var(--primary-light)", display: "flex", flexDirection: "column", gap: "14px" }}>
                 <div>
-                  <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">元の発話</label>
-                  <textarea
-                    value={draft.raw ?? ""}
-                    onChange={(e) => setDraft({ ...draft, raw: e.target.value })}
-                    rows={2}
-                    className="mt-1 w-full border border-gray-300 rounded px-2 py-1 text-sm font-mono"
-                  />
+                  <label className="field-label">元の発話</label>
+                  <textarea value={draft.raw ?? ""} onChange={(e) => setDraft({ ...draft, raw: e.target.value })} rows={2} style={{ fontFamily: "'DM Mono', monospace", fontSize: "13px" }} />
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  {(["observation", "interpretation", "insight"] as const).map((field) => (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "12px" }}>
+                  {CELLS.map(({ field, label }) => (
                     <div key={field}>
-                      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                        {field === "observation" ? "観察" : field === "interpretation" ? "解釈" : "インサイト"}
-                      </label>
-                      <textarea
-                        value={(draft[field] as string) ?? ""}
-                        onChange={(e) => setDraft({ ...draft, [field]: e.target.value })}
-                        rows={3}
-                        className="mt-1 w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                      />
+                      <label className="field-label">{label}</label>
+                      <textarea value={(draft[field] as string) ?? ""} onChange={(e) => setDraft({ ...draft, [field]: e.target.value })} rows={3} />
                     </div>
                   ))}
                 </div>
-                <div className="flex gap-2 justify-end flex-wrap">
-                  {observations.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeObservation(obs.id)}
-                      className="text-sm text-red-600 hover:text-red-800 px-3 py-1 mr-auto"
-                    >
-                      このカードを削除
-                    </button>
-                  )}
-                  <button onClick={() => setEditing(null)} className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1">
-                    キャンセル
-                  </button>
-                  <button onClick={saveEdit} className="text-sm bg-indigo-600 text-white px-3 py-1 rounded hover:bg-indigo-700">
-                    保存
-                  </button>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  {observations.length > 1
+                    ? <button type="button" onClick={() => removeObservation(obs.id)} style={{ fontSize: "13px", color: "var(--secondary)", background: "none", border: "none", cursor: "pointer", padding: "6px 0" }}>このカードを削除</button>
+                    : <div />}
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    <button onClick={() => setEditing(null)} className="btn-ghost">キャンセル</button>
+                    <button onClick={saveEdit} className="btn-primary" style={{ padding: "8px 18px", fontSize: "13px" }}>保存</button>
+                  </div>
                 </div>
               </div>
             ) : (
-              <div className="p-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-gray-400 font-mono mb-2">{obs.id}</p>
-                    <p className="text-sm text-gray-600 font-mono bg-gray-50 rounded px-2 py-1 mb-3 line-clamp-2">
-                      {obs.raw}
-                    </p>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      <Cell label="観察" color="blue" text={obs.observation} />
-                      <Cell label="解釈" color="amber" text={obs.interpretation} />
-                      <Cell label="インサイト" color="purple" text={obs.insight} />
+              <div style={{ padding: "16px 20px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+                      <span style={{ fontSize: "10px", fontFamily: "'DM Mono', monospace", color: "var(--text-muted)", background: "var(--bg-muted)", padding: "2px 8px", borderRadius: "4px" }}>
+                        #{idx + 1}
+                      </span>
+                      {obs.raw && (
+                        <p style={{ fontSize: "12px", color: "var(--text-muted)", fontFamily: "'DM Mono', monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "360px" }}>
+                          {obs.raw}
+                        </p>
+                      )}
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+                      {CELLS.map(({ field, label, color, bg, border }) => (
+                        <div key={field} className="obs-cell" style={{ background: bg, border: `1px solid ${border}` }}>
+                          <p className="obs-cell-label" style={{ color }}>{label}</p>
+                          <p style={{ fontSize: "12px", color: "var(--text-primary)", lineHeight: 1.55, margin: 0 }}>
+                            {obs[field] || <span style={{ color: "var(--text-muted)" }}>未入力</span>}
+                          </p>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                  <div className="flex flex-col items-end gap-1 shrink-0">
+                  <div style={{ display: "flex", flexDirection: "column", gap: "4px", flexShrink: 0 }}>
+                    <button type="button" onClick={() => startEdit(obs)} className="btn-ghost" style={{ fontSize: "12px", padding: "5px 10px" }}>編集</button>
                     {observations.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeObservation(obs.id)}
-                        className="text-xs text-red-500 hover:text-red-700 whitespace-nowrap"
-                      >
-                        削除
-                      </button>
+                      <button type="button" onClick={() => removeObservation(obs.id)} style={{ fontSize: "12px", color: "var(--secondary)", background: "none", border: "none", cursor: "pointer", padding: "5px 10px", borderRadius: "var(--radius-sm)" }}>削除</button>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => startEdit(obs)}
-                      className="text-xs text-gray-400 hover:text-indigo-600 whitespace-nowrap"
-                    >
-                      編集
-                    </button>
                   </div>
                 </div>
               </div>
@@ -183,47 +135,30 @@ export default function Step2Structure({ sessionLog, observations, onChange, onN
         ))}
       </div>
 
-      <div>
-        <button
-          type="button"
-          onClick={addObservation}
-          className="w-full border-2 border-dashed border-gray-300 rounded-lg py-3 text-sm font-medium text-gray-600 hover:border-indigo-400 hover:text-indigo-700 hover:bg-indigo-50/50 transition-colors"
-        >
-          + 観察カードを追加
+      <button
+        type="button"
+        onClick={addObservation}
+        style={{ width: "100%", border: "1.5px dashed var(--border-strong)", borderRadius: "var(--radius-md)", padding: "14px", fontSize: "13px", fontWeight: 500, color: "var(--text-secondary)", background: "none", cursor: "pointer", transition: "all 0.15s", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+        onMouseEnter={e => { const b = e.currentTarget; b.style.borderColor = "var(--primary)"; b.style.color = "var(--primary-dark)"; b.style.background = "var(--primary-light)"; }}
+        onMouseLeave={e => { const b = e.currentTarget; b.style.borderColor = "var(--border-strong)"; b.style.color = "var(--text-secondary)"; b.style.background = "none"; }}
+      >
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"/>
+        </svg>
+        観察カードを追加
+      </button>
+
+      <div className="divider" style={{ margin: "4px 0" }} />
+      <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <button onClick={onBack} className="btn-ghost">
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M8.5 2L4 6.5 8.5 11" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          戻る
+        </button>
+        <button type="button" onClick={onNext} className="btn-primary">
+          課題入力へ
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2.5 7h9M8 3.5L11.5 7 8 10.5" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </button>
       </div>
-
-      <div className="flex justify-between">
-        <button onClick={onBack} className="text-sm text-gray-500 hover:text-gray-700 px-4 py-2">
-          ← 戻る
-        </button>
-        <button
-          type="button"
-          onClick={onNext}
-          className="bg-indigo-600 text-white px-6 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors"
-        >
-          課題入力へ →
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function Cell({ label, color, text }: { label: string; color: "blue" | "amber" | "purple"; text: string }) {
-  const colors = {
-    blue: "bg-blue-50 text-blue-800 border-blue-100",
-    amber: "bg-amber-50 text-amber-800 border-amber-100",
-    purple: "bg-purple-50 text-purple-800 border-purple-100",
-  };
-  const labelColors = {
-    blue: "text-blue-500",
-    amber: "text-amber-500",
-    purple: "text-purple-500",
-  };
-  return (
-    <div className={`border rounded p-2 ${colors[color]}`}>
-      <p className={`text-xs font-semibold uppercase tracking-wide mb-1 ${labelColors[color]}`}>{label}</p>
-      <p className="text-xs leading-relaxed">{text}</p>
     </div>
   );
 }
