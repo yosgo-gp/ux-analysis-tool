@@ -14,9 +14,11 @@ interface Props {
   onChange: (observations: Observation[]) => void;
   onNext: () => void;
   onBack: () => void;
+  /** ログから観察カードを再生成（ブラウザ内のルールベース） */
+  onRegenerateFromLog?: () => void;
 }
 
-export default function Step2Structure({ sessionLog, observations, onChange, onNext, onBack }: Props) {
+export default function Step2Structure({ sessionLog, observations, onChange, onNext, onBack, onRegenerateFromLog }: Props) {
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<Partial<Observation>>({});
   const didAutoOpenFirst = useRef(false);
@@ -77,9 +79,23 @@ export default function Step2Structure({ sessionLog, observations, onChange, onN
       <div>
         <h2 className="text-xl font-semibold text-gray-800 mb-1">観察・解釈・インサイト入力</h2>
         <p className="text-sm text-gray-500">
-          観察（事実）・解釈（仮説）・インサイト（本質的ニーズ/痛み）を手入力してください。
+          観察（事実）・解釈（仮説）・インサイト（本質的ニーズ/痛み）を確認・修正してください。Step1で貼ったログから、
+          ブラウザ内のルールで下書きを生成する場合は「ログから再生成」を使えます。
         </p>
       </div>
+
+      {onRegenerateFromLog && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onRegenerateFromLog}
+            className="text-sm border border-indigo-300 text-indigo-700 px-4 py-2 rounded-lg font-medium hover:bg-indigo-50 transition-colors"
+          >
+            ログから観察カードを再生成
+          </button>
+          <p className="text-xs text-gray-400 self-center">外部APIは使いません（キーワード・話者ラベル・前後行のヒューリスティック）</p>
+        </div>
+      )}
 
       <div className="space-y-3">
         {observations.map((obs) => (

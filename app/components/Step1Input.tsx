@@ -64,7 +64,8 @@ export default function Step1Input({ onNext }: Props) {
           発話ログ <span className="text-xs font-normal text-gray-400">(任意)</span>
         </label>
         <p className="text-xs text-gray-400 mb-2">
-          テスト中の発話・観察記録をそのまま貼り付けてください（発話者ラベルありでも可）
+          1人分のユーザーテストの発話録をそのまま貼り付けてください（発話者ラベルあり推奨）。「分析開始」でブラウザ内のルールにより、
+          意味のある発話の抜き出しと観察・解釈・インサイトの下書きを生成します（外部APIは使いません）。
         </p>
         <textarea
           value={log}

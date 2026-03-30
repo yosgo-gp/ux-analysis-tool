@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { Session, SessionMeta, Observation, Issue, calcPriority } from "@/app/types";
+import { generateObservationsFromTranscript } from "@/app/lib/transcriptAnalysis";
 import Step1Input from "@/app/components/Step1Input";
 import Step2Structure from "@/app/components/Step2Structure";
 import Step3Issues from "@/app/components/Step3Issues";
@@ -48,16 +49,21 @@ export default function HomePage() {
       };
       setMeta(newMeta);
       setSessionLog(log);
-      // Step1完了時点では観察カードを1件作成（raw は Step1 ログを保持）。
-      const initialObservation: Observation = {
-        id: `obs-${generateId()}`,
-        raw: log,
-        observation: "",
-        interpretation: "",
-        insight: "",
-      };
+      // 発話ログがある場合はルールベースで観察カードを複数生成（APIなし）
+      const nextObservations: Observation[] =
+        log.trim().length > 0
+          ? generateObservationsFromTranscript(log, generateId)
+          : [
+              {
+                id: `obs-${generateId()}`,
+                raw: "",
+                observation: "",
+                interpretation: "",
+                insight: "",
+              },
+            ];
 
-      setObservations([initialObservation]);
+      setObservations(nextObservations);
       setIssues([]); // 後続ステップの状態をクリア
       setStep(2);
     },
@@ -106,6 +112,11 @@ export default function HomePage() {
     setObservations([]);
     setIssues([]);
   }, []);
+
+  const handleRegenerateObservationsFromLog = useCallback(() => {
+    if (!sessionLog.trim()) return;
+    setObservations(generateObservationsFromTranscript(sessionLog, generateId));
+  }, [sessionLog]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -156,6 +167,7 @@ export default function HomePage() {
               onChange={setObservations}
               onNext={handleStep2Next}
               onBack={() => setStep(1)}
+              onRegenerateFromLog={sessionLog.trim() ? handleRegenerateObservationsFromLog : undefined}
             />
           )}
           {step === 3 && (
